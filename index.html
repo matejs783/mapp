@@ -311,7 +311,7 @@ let dbCountries = {};
 let selectedCountryId = null;
 let root, chart, worldSeries;
 
-// Nezávislá databáze zemí pro bleskové vyhledávání (Čeština + Angličtina)
+// Databáze zemí pro spolehlivý překlad a vyhledávání
 const countryLookup = [
     { id: "CZ", cs: "Česko", en: "Czechia" }, { id: "SK", cs: "Slovensko", en: "Slovakia" },
     { id: "DE", cs: "Německo", en: "Germany" }, { id: "AT", cs: "Rakousko", en: "Austria" },
@@ -343,14 +343,13 @@ const countryLookup = [
     { id: "LK", cs: "Šrí Lanka", en: "Sri Lanka" }, { id: "MV", cs: "Maledivy", en: "Maldives" }
 ];
 
-// Vrátí nejvhodnější název pro zobrazení
 function getCountryName(code) {
     const found = countryLookup.find(c => c.id === code);
     if (found) return found.cs;
-    const polygon = worldSeries ? worldSeries.getDataItemById(code) : null;
-    return polygon ? polygon.dataContext.name : code;
+    return code;
 }
 
+// Inicializace mapy AmCharts 5
 function initMap() {
     root = am5.Root.new("chartdiv");
     root.setThemes([am5themes_Animated.new(root)]);
@@ -374,6 +373,7 @@ function initMap() {
 
     worldSeries.mapPolygons.template.states.create("hover", { fill: am5.color(0x94a3b8) });
 
+    // Kliknutí na zemi na mapě
     worldSeries.mapPolygons.template.events.on("click", function(ev) {
         if (isReadOnly) return;
         if (!currentUser) { alert("Pro úpravy se nejdříve přihlas."); return; }
@@ -384,19 +384,19 @@ function initMap() {
 
     chart.set("zoomControl", am5map.ZoomControl.new(root, {}));
 
+    // Teprve až mapa kompletně vygeneruje polygony, zapneme vyhledávač a stáhneme data
     worldSeries.events.on("datavalidated", () => {
+        buildSearch();
         if (isReadOnly) {
             loadSharedData();
+        } else if (currentUser) {
+            loadUserData();
         } else {
             updateUI();
         }
     });
-
-    // Vyhledávač nastartujeme okamžitě, bez závislosti na vnitřním stavu mapy!
-    buildSearch();
 }
 
-// Spustit ihned
 initMap();
 
 // Modal okno logika
@@ -430,7 +430,7 @@ document.getElementById("modalSaveBtn").onclick = async () => {
     updateUI();
 };
 
-// --- NOVÝ, NEPRŮSTŘELNÝ NAŠEPTÁVAČ ---
+// Vyhledávač a hladký dolet na mapě
 function buildSearch() {
     const searchInput = document.getElementById("searchInput");
     const resultsDiv = document.getElementById("searchResults");
@@ -444,7 +444,6 @@ function buildSearch() {
             return; 
         }
 
-        // Vyhledáváme bleskově v našem lokálním slovníku (v češtině i angličtině)
         const filtered = countryLookup.filter(c => 
             c.cs.toLowerCase().includes(val) || 
             c.en.toLowerCase().includes(val)
@@ -465,15 +464,14 @@ function buildSearch() {
                 searchInput.value = "";
                 resultsDiv.style.display = "none";
 
-                // Najdeme prvek na mapě podle ID
+                // Bezpečné dohledání země v AmCharts a animovaný přesun
                 const dataItem = worldSeries.getDataItemById(country.id);
                 if (dataItem) {
-                    chart.zoomToDataItem(dataItem); // Plynulý dolet kamery
+                    chart.zoomToDataItem(dataItem);
                     worldSeries.select(dataItem);
                 }
                 
                 if (!isReadOnly && currentUser) {
-                    // Okamžité otevření modalu bez čekání
                     openModal(country.id);
                 }
             };
@@ -492,6 +490,7 @@ function buildSearch() {
 
 // --- FIREBASE DATOVÉ FUNKCE ---
 async function loadUserData() {
+    if (!currentUser) return;
     const ref = doc(db, "users_v2", currentUser.uid);
     const snap = await getDoc(ref);
     dbCountries = snap.exists() ? snap.data() : {};
@@ -507,27 +506,26 @@ async function loadSharedData() {
 }
 
 async function saveData() {
-    if (isReadOnly) return;
+    if (isReadOnly || !currentUser) return;
     const ref = doc(db, "users_v2", currentUser.uid);
     await setDoc(ref, dbCountries);
 }
 
-// --- UPDATE UI & MAP VISUALS ---
+// --- SYNC DATOVÉHO STAVU S GRAFIKOU MAPY ---
 function updateUI() {
-    if (!worldSeries) return;
-
     const vList = document.getElementById("vList");
     const wList = document.getElementById("wList");
-    vList.innerHTML = ""; wList.innerHTML = "";
+    if (!vList || !wList) return;
 
+    vList.innerHTML = ""; wList.innerHTML = "";
     let vCount = 0; let wCount = 0;
 
-    // Resetujeme celou mapu do šedé
+    // 1. Krok: Uvedení celé mapy do základní šedé barvy
     worldSeries.mapPolygons.each(polygon => {
         polygon.get("mapPolygon").set("fill", am5.color(0xcbd5e1));
     });
 
-    // Obarvíme uložené země
+    // 2. Krok: Obarvení uložených dat a vypsání seznamů
     Object.keys(dbCountries).forEach(code => {
         const item = dbCountries[code];
         const polygon = worldSeries.getDataItemById(code);
@@ -588,7 +586,10 @@ onAuthStateChanged(auth, async (user) => {
         loginBtn.style.display = "none";
         logoutBtn.style.display = "block";
         document.getElementById("shareBtn").style.display = "inline-block";
-        await loadUserData();
+        // Pokud už AmCharts dobudoval mapu, rovnou stáhneme data
+        if (worldSeries && worldSeries.mapPolygons.length > 0) {
+            await loadUserData();
+        }
     } else {
         currentUser = null;
         dbCountries = {};
