@@ -215,7 +215,7 @@
         </div>
         
         <div class="search-box">
-            <input type="text" id="searchInput" placeholder="Hledej zemi (např. France)..." autocomplete="off">
+            <input type="text" id="searchInput" placeholder="Hledej zemi (např. Francie)..." autocomplete="off">
             <i class="fa-solid fa-magnifying-glass"></i>
             <div id="searchResults" class="search-results"></div>
         </div>
@@ -311,7 +311,46 @@ let dbCountries = {};
 let selectedCountryId = null;
 let root, chart, worldSeries;
 
-// Inicializace mapy
+// Nezávislá databáze zemí pro bleskové vyhledávání (Čeština + Angličtina)
+const countryLookup = [
+    { id: "CZ", cs: "Česko", en: "Czechia" }, { id: "SK", cs: "Slovensko", en: "Slovakia" },
+    { id: "DE", cs: "Německo", en: "Germany" }, { id: "AT", cs: "Rakousko", en: "Austria" },
+    { id: "PL", cs: "Polsko", en: "Poland" }, { id: "FR", cs: "Francie", en: "France" },
+    { id: "IT", cs: "Itálie", en: "Italy" }, { id: "ES", cs: "Španělsko", en: "Spain" },
+    { id: "GB", cs: "Velká Británie", en: "United Kingdom" }, { id: "US", cs: "USA", en: "United States" },
+    { id: "HR", cs: "Chorvatsko", en: "Croatia" }, { id: "GR", cs: "Řecko", en: "Greece" },
+    { id: "PT", cs: "Portugalsko", en: "Portugal" }, { id: "EG", cs: "Egypt", en: "Egypt" },
+    { id: "TN", cs: "Tunisko", en: "Tunisia" }, { id: "TR", cs: "Turecko", en: "Turkey" },
+    { id: "TH", cs: "Thajsko", en: "Thailand" }, { id: "VN", cs: "Vietnam", en: "Vietnam" },
+    { id: "JP", cs: "Japonsko", en: "Japan" }, { id: "CN", cs: "Čína", en: "China" },
+    { id: "CA", cs: "Kanada", en: "Canada" }, { id: "MX", cs: "Mexiko", en: "Mexico" },
+    { id: "BR", cs: "Brazílie", en: "Brazil" }, { id: "AR", cs: "Argentina", en: "Argentina" },
+    { id: "AU", cs: "Austrálie", en: "Australia" }, { id: "NZ", cs: "Nový Zéland", en: "New Zealand" },
+    { id: "ZA", cs: "Jihoafrická republika", en: "South Africa" }, { id: "CH", cs: "Švýcarsko", en: "Switzerland" },
+    { id: "NL", cs: "Nizozemsko", en: "Netherlands" }, { id: "BE", cs: "Belgie", en: "Belgium" },
+    { id: "IE", cs: "Irsko", en: "Ireland" }, { id: "SE", cs: "Švédsko", en: "Sweden" },
+    { id: "NO", cs: "Norsko", en: "Norway" }, { id: "FI", cs: "Finsko", en: "Finland" },
+    { id: "DK", cs: "Dánsko", en: "Denmark" }, { id: "IS", cs: "Island", en: "Iceland" },
+    { id: "HU", cs: "Maďarsko", en: "Hungary" }, { id: "RO", cs: "Rumunsko", en: "Romania" },
+    { id: "BG", cs: "Bulharsko", en: "Bulgaria" }, { id: "UA", cs: "Ukrajina", en: "Ukraine" },
+    { id: "RU", cs: "Rusko", en: "Russia" }, { id: "IN", cs: "Indie", en: "India" },
+    { id: "ID", cs: "Indonésie", en: "Indonesia" }, { id: "MY", cs: "Malajsie", en: "Malaysia" },
+    { id: "SG", cs: "Singapur", en: "Singapore" }, { id: "AE", cs: "Spojené arabské emiráty", en: "United Arab Emirates" },
+    { id: "IL", cs: "Izrael", en: "Israel" }, { id: "MA", cs: "Maroko", en: "Morocco" },
+    { id: "CU", cs: "Kuba", en: "Cuba" }, { id: "PE", cs: "Peru", en: "Peru" },
+    { id: "CL", cs: "Chile", en: "Chile" }, { id: "CO", cs: "Kolumbie", en: "Colombia" },
+    { id: "KE", cs: "Keňa", en: "Kenya" }, { id: "TZ", cs: "Tanzanie", en: "Tanzania" },
+    { id: "LK", cs: "Šrí Lanka", en: "Sri Lanka" }, { id: "MV", cs: "Maledivy", en: "Maldives" }
+];
+
+// Vrátí nejvhodnější název pro zobrazení
+function getCountryName(code) {
+    const found = countryLookup.find(c => c.id === code);
+    if (found) return found.cs;
+    const polygon = worldSeries ? worldSeries.getDataItemById(code) : null;
+    return polygon ? polygon.dataContext.name : code;
+}
+
 function initMap() {
     root = am5.Root.new("chartdiv");
     root.setThemes([am5themes_Animated.new(root)]);
@@ -345,25 +384,26 @@ function initMap() {
 
     chart.set("zoomControl", am5map.ZoomControl.new(root, {}));
 
-    // KLÍČOVÁ OPRAVA: Počkáme na plné vykreslení a až pak nastartujeme vyhledávač a Firebase
     worldSeries.events.on("datavalidated", () => {
-        setTimeout(() => {
-            buildSearch(); 
-            if (isReadOnly) {
-                loadSharedData();
-            }
-        }, 300); // Malá pauza zajistí, že data v mapě už 100% existují
+        if (isReadOnly) {
+            loadSharedData();
+        } else {
+            updateUI();
+        }
     });
+
+    // Vyhledávač nastartujeme okamžitě, bez závislosti na vnitřním stavu mapy!
+    buildSearch();
 }
 
+// Spustit ihned
 initMap();
 
 // Modal okno logika
 const modal = document.getElementById("countryModal");
 function openModal(countryId) {
     selectedCountryId = countryId;
-    const dataItem = worldSeries.getDataItemById(countryId);
-    document.getElementById("modalCountryName").textContent = dataItem ? dataItem.dataContext.name : countryId;
+    document.getElementById("modalCountryName").textContent = getCountryName(countryId);
     
     const existingData = dbCountries[countryId] || { status: "none", date: "", notes: "" };
     document.getElementById("modalStatus").value = existingData.status || "none";
@@ -390,22 +430,11 @@ document.getElementById("modalSaveBtn").onclick = async () => {
     updateUI();
 };
 
-// --- FUNKČNÍ NAŠEPTÁVAČ A VYHLEDÁVAČ ---
+// --- NOVÝ, NEPRŮSTŘELNÝ NAŠEPTÁVAČ ---
 function buildSearch() {
     const searchInput = document.getElementById("searchInput");
     const resultsDiv = document.getElementById("searchResults");
 
-    // Vytvoříme si statické pole zemí přímo z nahraných geodat mapy
-    const allCountries = [];
-    worldSeries.mapPolygons.each(polygon => {
-        const name = polygon.dataItem.get("name");
-        const id = polygon.dataItem.get("id");
-        if (name && id) {
-            allCountries.push({ id: id, name: name, polygonItem: polygon.dataItem });
-        }
-    });
-
-    // Hlídání zápisu do vyhledávače
     searchInput.oninput = () => {
         const val = searchInput.value.trim().toLowerCase();
         resultsDiv.innerHTML = "";
@@ -415,8 +444,11 @@ function buildSearch() {
             return; 
         }
 
-        // Filtrujeme země podle zadaného textu (hledá shodu kdekoli v názvu)
-        const filtered = allCountries.filter(c => c.name.toLowerCase().includes(val));
+        // Vyhledáváme bleskově v našem lokálním slovníku (v češtině i angličtině)
+        const filtered = countryLookup.filter(c => 
+            c.cs.toLowerCase().includes(val) || 
+            c.en.toLowerCase().includes(val)
+        );
 
         if (filtered.length === 0) {
             resultsDiv.innerHTML = `<div class="search-item" style="color:var(--text-muted); cursor:default;">Země nenalezena</div>`;
@@ -424,22 +456,25 @@ function buildSearch() {
             return;
         }
 
-        // Zobrazíme maximálně top 6 výsledků, aby menu nepřetékalo obrazovku
         filtered.slice(0, 6).forEach(country => {
             const item = document.createElement("div");
             item.className = "search-item";
-            item.textContent = country.name;
+            item.innerHTML = `<strong>${country.cs}</strong> <span style="color:var(--text-muted); font-size:11px;">(${country.en})</span>`;
             
-            // Po kliknutí na nalezenou položku v našeptávači
             item.onclick = () => {
-                chart.zoomToDataItem(country.polygonItem); // Letadlo letí!
-                worldSeries.select(country.polygonItem);
                 searchInput.value = "";
                 resultsDiv.style.display = "none";
+
+                // Najdeme prvek na mapě podle ID
+                const dataItem = worldSeries.getDataItemById(country.id);
+                if (dataItem) {
+                    chart.zoomToDataItem(dataItem); // Plynulý dolet kamery
+                    worldSeries.select(dataItem);
+                }
                 
-                // Pokud je uživatel přihlášen a nejsme v režimu sdílení, rovnou otevřeme editor
                 if (!isReadOnly && currentUser) {
-                    setTimeout(() => openModal(country.id), 600); // Otevře okno hned po doletu
+                    // Okamžité otevření modalu bez čekání
+                    openModal(country.id);
                 }
             };
             resultsDiv.appendChild(item);
@@ -448,7 +483,6 @@ function buildSearch() {
         resultsDiv.style.display = "block";
     };
 
-    // Zavřít našeptávač, když uživatel klikne kamkoli mimo něj
     document.addEventListener("click", (e) => {
         if (e.target !== searchInput && e.target !== resultsDiv) {
             resultsDiv.style.display = "none";
@@ -480,20 +514,24 @@ async function saveData() {
 
 // --- UPDATE UI & MAP VISUALS ---
 function updateUI() {
+    if (!worldSeries) return;
+
     const vList = document.getElementById("vList");
     const wList = document.getElementById("wList");
     vList.innerHTML = ""; wList.innerHTML = "";
 
     let vCount = 0; let wCount = 0;
 
+    // Resetujeme celou mapu do šedé
     worldSeries.mapPolygons.each(polygon => {
         polygon.get("mapPolygon").set("fill", am5.color(0xcbd5e1));
     });
 
+    // Obarvíme uložené země
     Object.keys(dbCountries).forEach(code => {
         const item = dbCountries[code];
         const polygon = worldSeries.getDataItemById(code);
-        const name = polygon ? polygon.dataContext.name : code;
+        const name = getCountryName(code);
 
         if (item.status === "visited") {
             vCount++;
