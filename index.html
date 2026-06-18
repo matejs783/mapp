@@ -323,7 +323,6 @@ function getCountryName(code) {
 }
 
 function initMap() {
-    // Čištění instancí AmCharts
     am5.array.each(am5.registry.rootElements, function(re) {
         if (re.get("id") === "chartdiv") { re.dispose(); }
     });
@@ -360,7 +359,6 @@ function initMap() {
 
     chart.set("zoomControl", am5map.ZoomControl.new(root, {}));
 
-    // Použijeme správnou událost a validní cykly AmCharts 5
     worldSeries.events.on("datavalidated", () => {
         buildSearch();
         if (isReadOnly) {
@@ -406,7 +404,7 @@ document.getElementById("modalSaveBtn").onclick = async () => {
     updateUI();
 };
 
-// --- BEZPEČNÝ NAŠEPTÁVAČ ---
+// --- NAŠEPTÁVAČ S FUNKČNÍM OTEVÍRÁNÍM ---
 function buildSearch() {
     const searchInput = document.getElementById("searchInput");
     const resultsDiv = document.getElementById("searchResults");
@@ -414,15 +412,15 @@ function buildSearch() {
     if (!searchInput || !resultsDiv || !worldSeries) return;
 
     const countriesList = [];
-    // V AmCharts 5 procházíme položky výhradně přes dataItems
     worldSeries.dataItems.forEach(dataItem => {
         const dContext = dataItem.dataContext;
         const id = dataItem.get("id");
-        if (dContext && dContext.name && id) {
+        const mapPolygon = dataItem.get("mapPolygon");
+        if (dContext && dContext.name && id && mapPolygon) {
             countriesList.push({
                 id: id,
                 name: dContext.name,
-                dataItem: dataItem
+                polygon: mapPolygon
             });
         }
     });
@@ -449,15 +447,17 @@ function buildSearch() {
             item.className = "search-item";
             item.innerHTML = `<strong>${country.name}</strong>`;
             
+            // KLIKNUTÍ NA NAŠEPTANOU POLOŽKU
             item.onclick = () => {
                 searchInput.value = "";
                 resultsDiv.style.display = "none";
 
-                chart.zoomToDataItem(country.dataItem);
-                worldSeries.select(country.dataItem);
+                // 1. Spolehlivý let na datový objekt polygonu země v AmCharts 5
+                worldSeries.zoomToDataObject(country.polygon.dataItem.dataContext);
                 
+                // 2. Okamžité vyvolání editačního okna, pokud je uživatel lognutý
                 if (!isReadOnly && currentUser) {
-                    setTimeout(() => openModal(country.id), 400);
+                    openModal(country.id);
                 }
             };
             resultsDiv.appendChild(item);
@@ -496,7 +496,7 @@ async function saveData() {
     await setDoc(ref, dbCountries);
 }
 
-// --- BEZPEČNÝ CORREKTNÍ UPDATE MAPY ---
+// --- UPDATE UI A OBALENÍ MAPY ---
 function updateUI() {
     if (!worldSeries) return;
 
@@ -507,7 +507,6 @@ function updateUI() {
     vList.innerHTML = ""; wList.innerHTML = "";
     let vCount = 0; let wCount = 0;
 
-    // Korektní přebarvení na výchozí šedou pomocí AmCharts 5 metod
     worldSeries.dataItems.forEach(dataItem => {
         const polygon = dataItem.get("mapPolygon");
         if (polygon) {
@@ -515,7 +514,6 @@ function updateUI() {
         }
     });
 
-    // Obarvení podle dat z Firestore
     Object.keys(dbCountries).forEach(code => {
         const item = dbCountries[code];
         const dataItem = worldSeries.getDataItemById(code);
