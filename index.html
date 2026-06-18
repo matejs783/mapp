@@ -359,7 +359,7 @@ function initMap() {
 
     chart.set("zoomControl", am5map.ZoomControl.new(root, {}));
 
-    // Okamžitá aktivace nezávislého vyhledávání
+    // Aktivace vyhledávače
     buildSearch();
 
     if (isReadOnly) {
@@ -400,7 +400,7 @@ document.getElementById("modalSaveBtn").onclick = async () => {
     updateUI();
 };
 
-// --- NOVÝ NEPRŮSTŘELNÝ NAŠEPTÁVAČ ---
+// --- ČISTÝ RYCHLÝ NAŠEPTÁVAČ S PŘÍMÝM OTEVŘENÍM OKNA ---
 function buildSearch() {
     const searchInput = document.getElementById("searchInput");
     const resultsDiv = document.getElementById("searchResults");
@@ -416,7 +416,6 @@ function buildSearch() {
             return; 
         }
 
-        // Generujeme seznam živě až při zápisu, abychom předešli asynchronním závodům AmCharts
         const countriesList = [];
         worldSeries.dataItems.forEach(dataItem => {
             const dContext = dataItem.dataContext;
@@ -424,8 +423,7 @@ function buildSearch() {
             if (dContext && dContext.name && id) {
                 countriesList.push({
                     id: id,
-                    name: dContext.name,
-                    dataItem: dataItem
+                    name: dContext.name
                 });
             }
         });
@@ -443,30 +441,20 @@ function buildSearch() {
             item.className = "search-item";
             item.innerHTML = `<strong>${country.name}</strong>`;
             
+            // KLIKNUTÍ – PŘÍMÁ AKCE BEZ ANIMACÍ
             item.onclick = () => {
                 searchInput.value = "";
                 resultsDiv.style.display = "none";
-
-                const targetDataItem = worldSeries.getDataItemById(country.id);
-                if (targetDataItem) {
-                    const polygon = targetDataItem.get("mapPolygon");
-                    
-                    // 1. Spolehlivý přelet pomocí vestavěné metody s datovým kontextem
-                    worldSeries.zoomToDataObject(targetDataItem);
-
-                    // 2. Simulace vizuálního najetí myši na polygon pro efekt
-                    if (polygon) {
-                        polygon.hover();
-                        setTimeout(() => polygon.unhover(), 1000);
-                    }
-                }
                 
-                // 3. Okamžité otevření editačního okna
-                if (!isReadOnly && currentUser) {
-                    setTimeout(() => {
-                        openModal(country.id);
-                    }, 350);
+                if (isReadOnly) return;
+                
+                if (!currentUser) { 
+                    alert("Pro úpravy se nejdříve přihlas."); 
+                    return; 
                 }
+
+                // Okamžitě otvíráme modal pro dané ID země
+                openModal(country.id);
             };
             resultsDiv.appendChild(item);
         });
@@ -584,11 +572,9 @@ onAuthStateChanged(auth, async (user) => {
         logoutBtn.style.display = "block";
         document.getElementById("shareBtn").style.display = "inline-block";
         
-        // Pokud mapa už visí načtená, ihned dotáhneme data
         if (worldSeries && worldSeries.dataItems.length > 0) {
             await loadUserData();
         } else {
-            // Pojistka pro první načtení
             setTimeout(async () => { await loadUserData(); }, 500);
         }
     } else {
