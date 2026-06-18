@@ -1,10 +1,218 @@
 <!DOCTYPE html>
-<html>
+<html lang="cs">
 <head>
-    <title>Mapa</title>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mapa světa</title>
+
+<style>
+body{
+    font-family: Arial, sans-serif;
+    margin:40px;
+}
+
+button{
+    padding:10px;
+    margin:5px;
+    cursor:pointer;
+}
+
+#countries{
+    margin-top:20px;
+}
+
+.country{
+    padding:5px;
+}
+</style>
+
 </head>
 <body>
-    <h1>TEST</h1>
-<h2>TEST</h2>
+
+<h1>Moje navštívené země</h1>
+
+<button id="loginBtn">
+    Přihlásit přes Google
+</button>
+
+<button id="logoutBtn" style="display:none">
+    Odhlásit
+</button>
+
+<p id="user"></p>
+
+<hr>
+
+<select id="countrySelect">
+    <option value="CZ">Česko</option>
+    <option value="SK">Slovensko</option>
+    <option value="DE">Německo</option>
+    <option value="AT">Rakousko</option>
+    <option value="HR">Chorvatsko</option>
+    <option value="IT">Itálie</option>
+    <option value="ES">Španělsko</option>
+    <option value="FR">Francie</option>
+    <option value="US">USA</option>
+</select>
+
+<button id="addCountryBtn">
+    Přidat zemi
+</button>
+
+<h3>
+Počet navštívených zemí:
+<span id="counter">0</span>
+</h3>
+
+<div id="countries"></div>
+
+<script type="module">
+
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+
+import {
+  getAuth,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signOut,
+  onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+import {
+  getFirestore,
+  doc,
+  getDoc,
+  setDoc
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBOGBofSuqHCGdmw2wlBP0B4vqqw29BWa4",
+  authDomain: "mapp-db0b3.firebaseapp.com",
+  projectId: "mapp-db0b3",
+  storageBucket: "mapp-db0b3.firebasestorage.app",
+  messagingSenderId: "436921956860",
+  appId: "1:436921956860:web:91dc40674343443c621a79"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+const provider = new GoogleAuthProvider();
+
+const loginBtn = document.getElementById("loginBtn");
+const logoutBtn = document.getElementById("logoutBtn");
+const userInfo = document.getElementById("user");
+const countriesDiv = document.getElementById("countries");
+const counter = document.getElementById("counter");
+
+let currentUser = null;
+let visited = [];
+
+async function loadData() {
+
+    const ref = doc(db, "users", currentUser.uid);
+
+    const snap = await getDoc(ref);
+
+    if(snap.exists()) {
+        visited = snap.data().countries || [];
+    } else {
+        visited = [];
+    }
+
+    render();
+}
+
+async function saveData() {
+
+    const ref = doc(db, "users", currentUser.uid);
+
+    await setDoc(ref,{
+        countries: visited
+    });
+}
+
+function render(){
+
+    countriesDiv.innerHTML = "";
+
+    visited.forEach(country => {
+
+        const div = document.createElement("div");
+
+        div.className = "country";
+        div.textContent = country;
+
+        countriesDiv.appendChild(div);
+    });
+
+    counter.textContent = visited.length;
+}
+
+loginBtn.onclick = async () => {
+
+    await signInWithPopup(auth, provider);
+
+};
+
+logoutBtn.onclick = async () => {
+
+    await signOut(auth);
+
+};
+
+document.getElementById("addCountryBtn").onclick = async () => {
+
+    if(!currentUser){
+        alert("Nejdříve se přihlas.");
+        return;
+    }
+
+    const country =
+        document.getElementById("countrySelect").value;
+
+    if(!visited.includes(country)){
+
+        visited.push(country);
+
+        await saveData();
+
+        render();
+    }
+};
+
+onAuthStateChanged(auth, async(user)=>{
+
+    if(user){
+
+        currentUser = user;
+
+        userInfo.textContent =
+            "Přihlášen: " + user.email;
+
+        loginBtn.style.display = "none";
+        logoutBtn.style.display = "inline-block";
+
+        await loadData();
+
+    }else{
+
+        currentUser = null;
+
+        visited = [];
+
+        userInfo.textContent =
+            "Nepřihlášen";
+
+        loginBtn.style.display = "inline-block";
+        logoutBtn.style.display = "none";
+
+        render();
+    }
+});
+
+</script>
+
 </body>
 </html>
