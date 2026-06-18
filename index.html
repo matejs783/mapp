@@ -80,6 +80,11 @@
             border: 1px solid var(--border);
             font-family: inherit;
             box-sizing: border-box;
+            font-size: 14px;
+        }
+        .search-box input:focus {
+            outline: 2px solid var(--primary);
+            border-color: transparent;
         }
         .search-box i {
             position: absolute;
@@ -93,18 +98,21 @@
             background: white;
             border: 1px solid var(--border);
             border-radius: 10px;
-            max-height: 200px;
+            max-height: 250px;
             overflow-y: auto;
-            z-index: 10;
+            z-index: 999;
             box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
             display: none;
         }
         .search-item {
-            padding: 10px 15px;
+            padding: 12px 15px;
             cursor: pointer;
             font-size: 14px;
+            border-bottom: 1px solid #f1f5f9;
+            font-weight: 500;
         }
-        .search-item:hover { background: #f1f5f9; }
+        .search-item:last-child { border-bottom: none; }
+        .search-item:hover { background: #f1f5f9; color: var(--primary); }
 
         /* Statistiky a Progress Bar */
         .stats-card {
@@ -161,6 +169,7 @@
             position: absolute; top: 35px; left: 35px;
             background: rgba(255,255,255,0.9); padding: 12px; border-radius: 10px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.05); font-size: 12px; display: flex; flex-direction: column; gap: 8px;
+            z-index: 5;
         }
         .legend-item { display: flex; align-items: center; gap: 8px; font-weight: 600; }
         .dot { width: 12px; height: 12px; border-radius: 3px; }
@@ -169,7 +178,7 @@
         .modal-overlay {
             position: fixed; top: 0; left: 0; right: 0; bottom: 0;
             background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(4px);
-            display: flex; align-items: center; justify-content: center; z-index: 100;
+            display: flex; align-items: center; justify-content: center; z-index: 1000;
             opacity: 0; pointer-events: none; transition: opacity 0.3s;
         }
         .modal-overlay.active { opacity: 1; pointer-events: auto; }
@@ -206,7 +215,7 @@
         </div>
         
         <div class="search-box">
-            <input type="text" id="searchInput" placeholder="Vyhledat zemi a letět...">
+            <input type="text" id="searchInput" placeholder="Hledej zemi (např. France)..." autocomplete="off">
             <i class="fa-solid fa-magnifying-glass"></i>
             <div id="searchResults" class="search-results"></div>
         </div>
@@ -293,19 +302,16 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const provider = new GoogleAuthProvider();
 
-// Kontrola režimu sdílení (hledání ?user=UID v URL)
 const urlParams = new URLSearchParams(window.location.search);
 const sharedUserId = urlParams.get('user');
 const isReadOnly = !!sharedUserId;
 
 let currentUser = null;
-let dbCountries = {}; // Struktura: { "CZ": { status: "visited", date: "", notes: "" } }
+let dbCountries = {}; 
 let selectedCountryId = null;
-
-// AmCharts globální proměnné
 let root, chart, worldSeries;
 
-// --- INICIALIZACE MAPY ---
+// Inicializace mapy
 function initMap() {
     root = am5.Root.new("chartdiv");
     root.setThemes([am5themes_Animated.new(root)]);
@@ -329,7 +335,6 @@ function initMap() {
 
     worldSeries.mapPolygons.template.states.create("hover", { fill: am5.color(0x94a3b8) });
 
-    // KLIKNUTÍ NA MAPU -> Otevře detail (pokud nejsme v read-only režimu)
     worldSeries.mapPolygons.template.events.on("click", function(ev) {
         if (isReadOnly) return;
         if (!currentUser) { alert("Pro úpravy se nejdříve přihlas."); return; }
@@ -340,18 +345,20 @@ function initMap() {
 
     chart.set("zoomControl", am5map.ZoomControl.new(root, {}));
 
-    // Jakmile se načtou data mapy, vybudujeme vyhledávání a stáhneme data z DB
+    // KLÍČOVÁ OPRAVA: Počkáme na plné vykreslení a až pak nastartujeme vyhledávač a Firebase
     worldSeries.events.on("datavalidated", () => {
-        buildSearch();
-        if (isReadOnly) {
-            loadSharedData();
-        }
+        setTimeout(() => {
+            buildSearch(); 
+            if (isReadOnly) {
+                loadSharedData();
+            }
+        }, 300); // Malá pauza zajistí, že data v mapě už 100% existují
     });
 }
 
 initMap();
 
-// --- MODAL OKNO (LOGIKA) ---
+// Modal okno logika
 const modal = document.getElementById("countryModal");
 function openModal(countryId) {
     selectedCountryId = countryId;
@@ -383,40 +390,73 @@ document.getElementById("modalSaveBtn").onclick = async () => {
     updateUI();
 };
 
-// --- VYHLEDÁVÁNÍ & LET LETADLEM ---
+// --- FUNKČNÍ NAŠEPTÁVAČ A VYHLEDÁVAČ ---
 function buildSearch() {
     const searchInput = document.getElementById("searchInput");
     const resultsDiv = document.getElementById("searchResults");
 
-    searchInput.oninput = () => {
-        const val = searchInput.value.toLowerCase();
-        resultsDiv.innerHTML = "";
-        if(!val) { resultsDiv.style.display = "none"; return; }
+    // Vytvoříme si statické pole zemí přímo z nahraných geodat mapy
+    const allCountries = [];
+    worldSeries.mapPolygons.each(polygon => {
+        const name = polygon.dataItem.get("name");
+        const id = polygon.dataItem.get("id");
+        if (name && id) {
+            allCountries.push({ id: id, name: name, polygonItem: polygon.dataItem });
+        }
+    });
 
-        let count = 0;
-        worldSeries.mapPolygons.each(polygon => {
-            const name = polygon.dataItem.get("name") || "";
-            const id = polygon.dataItem.get("id");
-            if (name.toLowerCase().includes(val) && count < 5) {
-                const item = document.createElement("div");
-                item.className = "search-item";
-                item.textContent = name;
-                item.onclick = () => {
-                    chart.zoomToDataItem(polygon.dataItem); // Hladký přelet
-                    worldSeries.select(polygon.dataItem);
-                    searchInput.value = "";
-                    resultsDiv.style.display = "none";
-                    if(!isReadOnly && currentUser) openModal(id);
-                };
-                resultsDiv.appendChild(item);
-                count++;
-            }
+    // Hlídání zápisu do vyhledávače
+    searchInput.oninput = () => {
+        const val = searchInput.value.trim().toLowerCase();
+        resultsDiv.innerHTML = "";
+        
+        if (!val) { 
+            resultsDiv.style.display = "none"; 
+            return; 
+        }
+
+        // Filtrujeme země podle zadaného textu (hledá shodu kdekoli v názvu)
+        const filtered = allCountries.filter(c => c.name.toLowerCase().includes(val));
+
+        if (filtered.length === 0) {
+            resultsDiv.innerHTML = `<div class="search-item" style="color:var(--text-muted); cursor:default;">Země nenalezena</div>`;
+            resultsDiv.style.display = "block";
+            return;
+        }
+
+        // Zobrazíme maximálně top 6 výsledků, aby menu nepřetékalo obrazovku
+        filtered.slice(0, 6).forEach(country => {
+            const item = document.createElement("div");
+            item.className = "search-item";
+            item.textContent = country.name;
+            
+            // Po kliknutí na nalezenou položku v našeptávači
+            item.onclick = () => {
+                chart.zoomToDataItem(country.polygonItem); // Letadlo letí!
+                worldSeries.select(country.polygonItem);
+                searchInput.value = "";
+                resultsDiv.style.display = "none";
+                
+                // Pokud je uživatel přihlášen a nejsme v režimu sdílení, rovnou otevřeme editor
+                if (!isReadOnly && currentUser) {
+                    setTimeout(() => openModal(country.id), 600); // Otevře okno hned po doletu
+                }
+            };
+            resultsDiv.appendChild(item);
         });
-        resultsDiv.style.display = count > 0 ? "block" : "none";
+
+        resultsDiv.style.display = "block";
     };
+
+    // Zavřít našeptávač, když uživatel klikne kamkoli mimo něj
+    document.addEventListener("click", (e) => {
+        if (e.target !== searchInput && e.target !== resultsDiv) {
+            resultsDiv.style.display = "none";
+        }
+    });
 }
 
-// --- DATOVÉ OPERACE FIREBASE ---
+// --- FIREBASE DATOVÉ FUNKCE ---
 async function loadUserData() {
     const ref = doc(db, "users_v2", currentUser.uid);
     const snap = await getDoc(ref);
@@ -446,12 +486,10 @@ function updateUI() {
 
     let vCount = 0; let wCount = 0;
 
-    // Reset bareb na mapě
     worldSeries.mapPolygons.each(polygon => {
-        polygon.set("fill", am5.color(0xcbd5e1));
+        polygon.get("mapPolygon").set("fill", am5.color(0xcbd5e1));
     });
 
-    // Projdeme data a aplikujeme změny
     Object.keys(dbCountries).forEach(code => {
         const item = dbCountries[code];
         const polygon = worldSeries.getDataItemById(code);
@@ -459,7 +497,7 @@ function updateUI() {
 
         if (item.status === "visited") {
             vCount++;
-            if(polygon) polygon.get("mapPolygon").set("fill", am5.color(0x10b981)); // Zelená
+            if(polygon) polygon.get("mapPolygon").set("fill", am5.color(0x10b981)); 
             
             const badge = document.createElement("span");
             badge.className = "badge v";
@@ -469,7 +507,7 @@ function updateUI() {
         } 
         else if (item.status === "wishlist") {
             wCount++;
-            if(polygon) polygon.get("mapPolygon").set("fill", am5.color(0xf59e0b)); // Žlutá
+            if(polygon) polygon.get("mapPolygon").set("fill", am5.color(0xf59e0b)); 
             
             const badge = document.createElement("span");
             badge.className = "badge w";
@@ -482,18 +520,16 @@ function updateUI() {
     document.getElementById("vCount").textContent = vCount;
     document.getElementById("wCount").textContent = wCount;
 
-    // Výpočet % (Svět má cca 195 nezávislých států)
     const percent = Math.min(((vCount / 195) * 100).toFixed(1), 100);
     document.getElementById("progressPercent").textContent = percent;
     document.getElementById("progressBar").style.width = percent + "%";
 }
 
-// Tlačítko pro sdílení
 document.getElementById("shareBtn").onclick = () => {
     if(!currentUser) return;
     const shareUrl = `${window.location.origin}${window.location.pathname}?user=${currentUser.uid}`;
     navigator.clipboard.writeText(shareUrl);
-    alert("Odkaz na tvou mapu byl zkopírován do schránky! Můžeš ho poslat kamarádům.");
+    alert("Odkaz na tvou mapu byl zkopírován do schránky!");
 };
 
 // --- AUTH LOGIKA ---
@@ -502,7 +538,6 @@ logoutBtn.onclick = async () => { window.location.href = window.location.origin 
 
 onAuthStateChanged(auth, async (user) => {
     if (isReadOnly) {
-        // Pokud si prohlížíme cizí mapu, ignorujeme stav přihlášení pro editaci
         document.getElementById("loginBtn").style.display = "none";
         document.getElementById("userStatus").textContent = "Režim prohlížení";
         return;
