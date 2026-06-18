@@ -318,8 +318,8 @@ let root, chart, worldSeries;
 
 function getCountryName(code) {
     if (!worldSeries) return code;
-    const polygon = worldSeries.getDataItemById(code);
-    return polygon && polygon.dataContext ? polygon.dataContext.name : code;
+    const dataItem = worldSeries.getDataItemById(code);
+    return dataItem && dataItem.dataContext ? dataItem.dataContext.name : code;
 }
 
 function initMap() {
@@ -359,17 +359,12 @@ function initMap() {
 
     chart.set("zoomControl", am5map.ZoomControl.new(root, {}));
 
-    // KLÍČOVÁ OPRAVA: Čekáme na událost "loaded", kdy jsou data v mapě fyzicky přítomná
-    worldSeries.events.on("loaded", () => {
-        buildSearch();
-        if (isReadOnly) {
-            loadSharedData();
-        } else if (currentUser) {
-            loadUserData();
-        } else {
-            updateUI();
-        }
-    });
+    // Okamžitá aktivace nezávislého vyhledávání
+    buildSearch();
+
+    if (isReadOnly) {
+        loadSharedData();
+    }
 }
 
 initMap();
@@ -405,22 +400,23 @@ document.getElementById("modalSaveBtn").onclick = async () => {
     updateUI();
 };
 
-// --- NAŠEPTÁVAČ S REÁLNÝMI DATY ---
+// --- NOVÝ NEPRŮSTŘELNÝ NAŠEPTÁVAČ ---
 function buildSearch() {
     const searchInput = document.getElementById("searchInput");
     const resultsDiv = document.getElementById("searchResults");
     
-    if (!searchInput || !resultsDiv || !worldSeries) return;
+    if (!searchInput || !resultsDiv) return;
 
     searchInput.oninput = () => {
         const val = searchInput.value.trim().toLowerCase();
         resultsDiv.innerHTML = "";
         
-        if (!val) { 
+        if (!val || !worldSeries || !worldSeries.dataItems || worldSeries.dataItems.length === 0) { 
             resultsDiv.style.display = "none"; 
             return; 
         }
 
+        // Generujeme seznam živě až při zápisu, abychom předešli asynchronním závodům AmCharts
         const countriesList = [];
         worldSeries.dataItems.forEach(dataItem => {
             const dContext = dataItem.dataContext;
@@ -451,13 +447,25 @@ function buildSearch() {
                 searchInput.value = "";
                 resultsDiv.style.display = "none";
 
-                // Přelet na vybranou zemi pomocí vestavěné metody AmCharts 5
-                worldSeries.zoomToDataObject(country.dataItem);
+                const targetDataItem = worldSeries.getDataItemById(country.id);
+                if (targetDataItem) {
+                    const polygon = targetDataItem.get("mapPolygon");
+                    
+                    // 1. Spolehlivý přelet pomocí vestavěné metody s datovým kontextem
+                    worldSeries.zoomToDataObject(targetDataItem);
+
+                    // 2. Simulace vizuálního najetí myši na polygon pro efekt
+                    if (polygon) {
+                        polygon.hover();
+                        setTimeout(() => polygon.unhover(), 1000);
+                    }
+                }
                 
+                // 3. Okamžité otevření editačního okna
                 if (!isReadOnly && currentUser) {
                     setTimeout(() => {
                         openModal(country.id);
-                    }, 400);
+                    }, 350);
                 }
             };
             resultsDiv.appendChild(item);
@@ -576,8 +584,12 @@ onAuthStateChanged(auth, async (user) => {
         logoutBtn.style.display = "block";
         document.getElementById("shareBtn").style.display = "inline-block";
         
+        // Pokud mapa už visí načtená, ihned dotáhneme data
         if (worldSeries && worldSeries.dataItems.length > 0) {
             await loadUserData();
+        } else {
+            // Pojistka pro první načtení
+            setTimeout(async () => { await loadUserData(); }, 500);
         }
     } else {
         currentUser = null;
