@@ -68,13 +68,13 @@
             border-radius: 12px;
             font-size: 14px;
             position: relative;
-            z-index: 10; /* Snížen index, aby přes něj mohl našeptávač */
+            z-index: 10;
         }
 
         /* Vyhledávání */
         .search-box {
             position: relative;
-            z-index: 9999; /* Maximální z-index, aby výsledky byly vždy nahoře */
+            z-index: 9999;
         }
         .search-box input {
             width: 100%;
@@ -316,15 +316,14 @@ let dbCountries = {};
 let selectedCountryId = null;
 let root, chart, worldSeries;
 
-// Funkce pro bezpečné zjištění jména země z vnitřních dat mapy
 function getCountryName(code) {
     if (!worldSeries) return code;
     const polygon = worldSeries.getDataItemById(code);
-    return polygon ? polygon.dataContext.name : code;
+    return polygon && polygon.dataContext ? polygon.dataContext.name : code;
 }
 
 function initMap() {
-    // Bezpečné čištění staré instance, aby nevznikaly duplicity
+    // Čištění instancí AmCharts
     am5.array.each(am5.registry.rootElements, function(re) {
         if (re.get("id") === "chartdiv") { re.dispose(); }
     });
@@ -351,7 +350,6 @@ function initMap() {
 
     worldSeries.mapPolygons.template.states.create("hover", { fill: am5.color(0x94a3b8) });
 
-    // Klikání přímo na polygony mapy
     worldSeries.mapPolygons.template.events.on("click", function(ev) {
         if (isReadOnly) return;
         if (!currentUser) { alert("Pro úpravy se nejdříve přihlas."); return; }
@@ -362,7 +360,7 @@ function initMap() {
 
     chart.set("zoomControl", am5map.ZoomControl.new(root, {}));
 
-    // Srdce celého skriptu: Až když mapa reálně existuje, navážeme Firestore a Vyhledávač
+    // Použijeme správnou událost a validní cykly AmCharts 5
     worldSeries.events.on("datavalidated", () => {
         buildSearch();
         if (isReadOnly) {
@@ -375,7 +373,6 @@ function initMap() {
     });
 }
 
-// Spustit sestavení mapy
 initMap();
 
 // Modal okno logika
@@ -409,22 +406,23 @@ document.getElementById("modalSaveBtn").onclick = async () => {
     updateUI();
 };
 
-// --- DYNAMICKÝ NAŠEPTÁVAČ ZE VŠECH MAPOVÝCH DAT ---
+// --- BEZPEČNÝ NAŠEPTÁVAČ ---
 function buildSearch() {
     const searchInput = document.getElementById("searchInput");
     const resultsDiv = document.getElementById("searchResults");
     
-    if (!searchInput || !resultsDiv) return;
+    if (!searchInput || !resultsDiv || !worldSeries) return;
 
-    // Vytáhneme kompletní seznam zemí přímo z geoJSONu mapy AmCharts
     const countriesList = [];
-    worldSeries.mapPolygons.each(polygon => {
-        const dContext = polygon.dataItem.dataContext;
-        if (dContext && dContext.name && polygon.dataItem.get("id")) {
+    // V AmCharts 5 procházíme položky výhradně přes dataItems
+    worldSeries.dataItems.forEach(dataItem => {
+        const dContext = dataItem.dataContext;
+        const id = dataItem.get("id");
+        if (dContext && dContext.name && id) {
             countriesList.push({
-                id: polygon.dataItem.get("id"),
+                id: id,
                 name: dContext.name,
-                dataItem: polygon.dataItem
+                dataItem: dataItem
             });
         }
     });
@@ -438,7 +436,6 @@ function buildSearch() {
             return; 
         }
 
-        // Hledání shody v anglických mapových názvech (např. France, Germany, Czechia)
         const filtered = countriesList.filter(c => c.name.toLowerCase().includes(val));
 
         if (filtered.length === 0) {
@@ -456,11 +453,9 @@ function buildSearch() {
                 searchInput.value = "";
                 resultsDiv.style.display = "none";
 
-                // Plynulý přesun kamery na vybranou zemi
                 chart.zoomToDataItem(country.dataItem);
                 worldSeries.select(country.dataItem);
                 
-                // Pokud je uživatel přihlášen, hned mu vyskočí okno pro úpravy
                 if (!isReadOnly && currentUser) {
                     setTimeout(() => openModal(country.id), 400);
                 }
@@ -471,7 +466,6 @@ function buildSearch() {
         resultsDiv.style.display = "block";
     };
 
-    // Zavření našeptávače při kliku mimo vyhledávací box
     document.addEventListener("click", (e) => {
         if (!searchInput.contains(e.target) && !resultsDiv.contains(e.target)) {
             resultsDiv.style.display = "none";
@@ -502,7 +496,7 @@ async function saveData() {
     await setDoc(ref, dbCountries);
 }
 
-// --- SYNCHRONIZACE S MAPOU A SEZNAMY ---
+// --- BEZPEČNÝ CORREKTNÍ UPDATE MAPY ---
 function updateUI() {
     if (!worldSeries) return;
 
@@ -513,20 +507,24 @@ function updateUI() {
     vList.innerHTML = ""; wList.innerHTML = "";
     let vCount = 0; let wCount = 0;
 
-    // Reset barvy všech prvků na mapě zpět na neutrální šedou
-    worldSeries.mapPolygons.each(polygon => {
-        polygon.get("mapPolygon").set("fill", am5.color(0xcbd5e1));
+    // Korektní přebarvení na výchozí šedou pomocí AmCharts 5 metod
+    worldSeries.dataItems.forEach(dataItem => {
+        const polygon = dataItem.get("mapPolygon");
+        if (polygon) {
+            polygon.set("fill", am5.color(0xcbd5e1));
+        }
     });
 
-    // Projedeme uložená data z Firebase a aplikujeme změny
+    // Obarvení podle dat z Firestore
     Object.keys(dbCountries).forEach(code => {
         const item = dbCountries[code];
-        const polygon = worldSeries.getDataItemById(code);
+        const dataItem = worldSeries.getDataItemById(code);
         const name = getCountryName(code);
+        const polygon = dataItem ? dataItem.get("mapPolygon") : null;
 
         if (item.status === "visited") {
             vCount++;
-            if(polygon) polygon.get("mapPolygon").set("fill", am5.color(0x10b981)); 
+            if (polygon) polygon.set("fill", am5.color(0x10b981)); 
             
             const badge = document.createElement("span");
             badge.className = "badge v";
@@ -536,7 +534,7 @@ function updateUI() {
         } 
         else if (item.status === "wishlist") {
             wCount++;
-            if(polygon) polygon.get("mapPolygon").set("fill", am5.color(0xf59e0b)); 
+            if (polygon) polygon.set("fill", am5.color(0xf59e0b)); 
             
             const badge = document.createElement("span");
             badge.className = "badge w";
@@ -561,7 +559,7 @@ document.getElementById("shareBtn").onclick = () => {
     alert("Odkaz na tvou mapu byl zkopírován do schránky!");
 };
 
-// --- AUTHENTIKACE LOGIKA ---
+// --- AUTH LOGIKA ---
 loginBtn.onclick = async () => { await signInWithPopup(auth, provider); };
 logoutBtn.onclick = async () => { window.location.href = window.location.origin + window.location.pathname; await signOut(auth); };
 
@@ -580,7 +578,7 @@ onAuthStateChanged(auth, async (user) => {
         logoutBtn.style.display = "block";
         document.getElementById("shareBtn").style.display = "inline-block";
         
-        if (worldSeries) {
+        if (worldSeries && worldSeries.dataItems.length > 0) {
             await loadUserData();
         }
     } else {
