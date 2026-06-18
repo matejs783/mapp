@@ -404,7 +404,7 @@ document.getElementById("modalSaveBtn").onclick = async () => {
     updateUI();
 };
 
-// --- NAŠEPTÁVAČ S FUNKČNÍM OTEVÍRÁNÍM ---
+// --- NAŠEPTÁVAČ S FIXNÍM DOLETEM ---
 function buildSearch() {
     const searchInput = document.getElementById("searchInput");
     const resultsDiv = document.getElementById("searchResults");
@@ -415,12 +415,11 @@ function buildSearch() {
     worldSeries.dataItems.forEach(dataItem => {
         const dContext = dataItem.dataContext;
         const id = dataItem.get("id");
-        const mapPolygon = dataItem.get("mapPolygon");
-        if (dContext && dContext.name && id && mapPolygon) {
+        if (dContext && dContext.name && id) {
             countriesList.push({
                 id: id,
                 name: dContext.name,
-                polygon: mapPolygon
+                dataContext: dContext // Ukládáme přímý odkaz na dataContext
             });
         }
     });
@@ -447,17 +446,18 @@ function buildSearch() {
             item.className = "search-item";
             item.innerHTML = `<strong>${country.name}</strong>`;
             
-            // KLIKNUTÍ NA NAŠEPTANOU POLOŽKU
             item.onclick = () => {
                 searchInput.value = "";
                 resultsDiv.style.display = "none";
 
-                // 1. Spolehlivý let na datový objekt polygonu země v AmCharts 5
-                worldSeries.zoomToDataObject(country.polygon.dataItem.dataContext);
+                // KLÍČOVÁ OPRAVA: V AmCharts 5 musíme předat přesný datový kontext z geoJSONu
+                worldSeries.zoomToDataObject(country.dataContext);
                 
-                // 2. Okamžité vyvolání editačního okna, pokud je uživatel lognutý
                 if (!isReadOnly && currentUser) {
-                    openModal(country.id);
+                    // Malé zpoždění pro plynulost animace letu kamery
+                    setTimeout(() => {
+                        openModal(country.id);
+                    }, 300);
                 }
             };
             resultsDiv.appendChild(item);
@@ -496,7 +496,7 @@ async function saveData() {
     await setDoc(ref, dbCountries);
 }
 
-// --- UPDATE UI A OBALENÍ MAPY ---
+// --- SYNC MAPY ---
 function updateUI() {
     if (!worldSeries) return;
 
