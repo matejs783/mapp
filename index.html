@@ -3,19 +3,22 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sledování navštívených zemí</title>
+    <title>Světoběžník PRO - Moje Cestovatelská Mapa</title>
 
     <script src="https://cdn.amcharts.com/lib/5/index.js"></script>
     <script src="https://cdn.amcharts.com/lib/5/map.js"></script>
     <script src="https://cdn.amcharts.com/lib/5/geodata/worldLow.js"></script>
     <script src="https://cdn.amcharts.com/lib/5/themes/Animated.js"></script>
 
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
     <style>
         :root {
             --primary: #4f46e5;
             --primary-hover: #4338ca;
-            --success: #10b981;
-            --danger: #ef4444;
+            --visited: #10b981;
+            --wishlist: #f59e0b;
             --bg-main: #f8fafc;
             --bg-card: #ffffff;
             --text-main: #0f172a;
@@ -24,7 +27,7 @@
         }
 
         body {
-            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+            font-family: 'Inter', sans-serif;
             margin: 0;
             padding: 0;
             background-color: var(--bg-main);
@@ -32,181 +35,243 @@
         }
 
         .dashboard {
-            max-width: 1400px;
+            max-width: 1500px;
             margin: 0 auto;
-            padding: 40px 20px;
+            padding: 30px 20px;
             display: grid;
-            grid-template-columns: 350px 1fr;
-            gap: 30px;
+            grid-template-columns: 380px 1fr;
+            gap: 25px;
         }
 
         @media (max-width: 1024px) {
-            .dashboard {
-                grid-template-columns: 1fr;
-            }
+            .dashboard { grid-template-columns: 1fr; }
         }
 
         /* Boční panel */
         .sidebar {
             background: var(--bg-card);
             border-radius: 16px;
-            padding: 30px;
-            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
+            padding: 25px;
+            box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
             border: 1px solid var(--border);
             display: flex;
             flex-direction: column;
-            gap: 24px;
+            gap: 20px;
             height: fit-content;
         }
 
-        h1 {
-            font-size: 24px;
-            font-weight: 800;
-            margin: 0;
-            letter-spacing: -0.02em;
-            color: var(--text-main);
-        }
+        h1 { font-size: 24px; font-weight: 800; margin: 0; letter-spacing: -0.02em; }
 
         .user-card {
             background: #f1f5f9;
-            padding: 16px;
+            padding: 15px;
             border-radius: 12px;
             font-size: 14px;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
         }
 
-        .user-email {
-            font-weight: 600;
-            color: var(--text-main);
-            word-break: break-all;
+        /* Vyhledávání */
+        .search-box {
+            position: relative;
+        }
+        .search-box input {
+            width: 100%;
+            padding: 12px 40px 12px 15px;
+            border-radius: 10px;
+            border: 1px solid var(--border);
+            font-family: inherit;
+            box-sizing: border-box;
+        }
+        .search-box i {
+            position: absolute;
+            right: 15px;
+            top: 15px;
+            color: var(--text-muted);
+        }
+        .search-results {
+            position: absolute;
+            top: 100%; left: 0; right: 0;
+            background: white;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 10;
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1);
+            display: none;
+        }
+        .search-item {
+            padding: 10px 15px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .search-item:hover { background: #f1f5f9; }
+
+        /* Statistiky a Progress Bar */
+        .stats-card {
+            background: #ffffff;
+            border: 1px solid var(--border);
+            padding: 20px;
+            border-radius: 12px;
+        }
+        .progress-container {
+            background: #e2e8f0;
+            border-radius: 10px;
+            height: 10px;
+            width: 100%;
+            margin-top: 10px;
+            overflow: hidden;
+        }
+        .progress-bar {
+            background: var(--visited);
+            height: 100%;
+            width: 0%;
+            transition: width 0.5s ease;
         }
 
         /* Tlačítka */
         button {
-            font-family: inherit;
-            font-size: 14px;
-            font-weight: 600;
-            padding: 12px 20px;
-            border-radius: 10px;
-            border: none;
-            cursor: pointer;
-            transition: all 0.2s ease;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
+            font-family: inherit; font-size: 14px; font-weight: 600;
+            padding: 12px; border-radius: 10px; border: none; cursor: pointer;
+            transition: all 0.2s; width: 100%;
         }
-
-        .btn-primary { background: var(--primary); color: white; width: 100%; }
+        .btn-primary { background: var(--primary); color: white; }
         .btn-primary:hover { background: var(--primary-hover); }
-        
-        .btn-danger { background: #fee2e2; color: var(--danger); width: 100%; }
-        .btn-danger:hover { background: #fca5a5; color: #7f1d1d; }
+        .btn-danger { background: #fee2e2; color: #ef4444; margin-top: 8px;}
+        .btn-danger:hover { background: #fca5a5; }
 
-        /* Statistiky */
-        .stats-box {
-            background: linear-gradient(135deg, #6366f1, #4f46e5);
-            color: white;
-            padding: 20px;
-            border-radius: 12px;
-            text-align: center;
-        }
-
-        .stats-count {
-            font-size: 48px;
-            font-weight: 800;
-            display: block;
-            margin-top: 5px;
-        }
-
-        /* Seznam zemí pod sebou */
-        .badge-container {
-            display: flex;
-            flex-wrap: wrap;
-            gap: 8px;
-            max-height: 250px;
-            overflow-y: auto;
-            padding-right: 5px;
-        }
-
+        /* Seznamy zemí */
+        .badge-list { display: flex; flex-wrap: wrap; gap: 6px; max-height: 180px; overflow-y: auto; }
         .badge {
-            background: #e0f2fe;
-            color: #0369a1;
-            padding: 6px 12px;
-            border-radius: 8px;
-            font-size: 13px;
-            font-weight: 600;
-            border: 1px solid #bae6fd;
+            padding: 6px 12px; border-radius: 8px; font-size: 12px; font-weight: 600;
+            display: inline-flex; align-items: center; gap: 5px;
         }
+        .badge.v { background: #e0f2fe; color: #0369a1; }
+        .badge.w { background: #fef3c7; color: #92400e; }
 
-        /* Hlavní panel s mapou */
+        /* Hlavní panel a mapa */
         .main-content {
-            background: var(--bg-card);
-            border-radius: 16px;
-            padding: 20px;
-            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.05), 0 2px 4px -2px rgb(0 0 0 / 0.05);
-            border: 1px solid var(--border);
-            display: flex;
-            flex-direction: column;
-            position: relative;
+            background: var(--bg-card); border-radius: 16px; padding: 20px;
+            border: 1px solid var(--border); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);
+            display: flex; flex-direction: column; position: relative;
         }
+        #chartdiv { width: 100%; height: 700px; background: #f8fafc; border-radius: 12px; }
 
-        /* Kontejner pro AmCharts Mapu */
-        #chartdiv {
-            width: 100%;
-            height: 650px;
-            background-color: #f8fafc;
-            border-radius: 12px;
-            overflow: hidden;
+        /* Legenda mapy */
+        .legend {
+            position: absolute; top: 35px; left: 35px;
+            background: rgba(255,255,255,0.9); padding: 12px; border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05); font-size: 12px; display: flex; flex-direction: column; gap: 8px;
         }
+        .legend-item { display: flex; align-items: center; gap: 8px; font-weight: 600; }
+        .dot { width: 12px; height: 12px; border-radius: 3px; }
 
-        .map-hint {
-            position: absolute;
-            bottom: 30px;
-            right: 30px;
-            background: rgba(15, 23, 42, 0.8);
-            color: white;
-            padding: 8px 16px;
-            border-radius: 30px;
-            font-size: 12px;
-            backdrop-filter: blur(4px);
-            pointer-events: none;
+        /* MODAL (Detail země) */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(4px);
+            display: flex; align-items: center; justify-content: center; z-index: 100;
+            opacity: 0; pointer-events: none; transition: opacity 0.3s;
+        }
+        .modal-overlay.active { opacity: 1; pointer-events: auto; }
+        .modal {
+            background: white; padding: 30px; border-radius: 16px; width: 400px;
+            box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);
+            display: flex; flex-direction: column; gap: 15px;
+        }
+        .modal h2 { margin: 0; font-size: 22px; }
+        .modal select, .modal input, .modal textarea {
+            width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 8px; font-family: inherit; box-sizing: border-box;
+        }
+        .modal-buttons { display: flex; gap: 10px; margin-top: 10px; }
+
+        /* Režim prohlížení (Sdílení) */
+        .view-only-banner {
+            background: #f43f5e; color: white; padding: 10px; text-align: center;
+            font-weight: bold; font-size: 14px; display: none;
         }
     </style>
 </head>
 <body>
 
+<div id="shareBanner" class="view-only-banner">
+    <i class="fa-solid fa-eye"></i> Prohlížíš sdílenou mapu uživatele. Tvůj přihlášený účet je dočasně neaktivní.
+</div>
+
 <div class="dashboard">
     
     <div class="sidebar">
-        <h1>Světoběžník</h1>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h1>Světoběžník <span style="color:var(--primary)">PRO</span></h1>
+            <button id="shareBtn" style="width: auto; padding: 8px 12px; display:none;" class="btn-primary" title="Kopírovat odkaz na mapu"><i class="fa-solid fa-share-nodes"></i></button>
+        </div>
+        
+        <div class="search-box">
+            <input type="text" id="searchInput" placeholder="Vyhledat zemi a letět...">
+            <i class="fa-solid fa-magnifying-glass"></i>
+            <div id="searchResults" class="search-results"></div>
+        </div>
         
         <div class="user-card">
-            <span id="userStatus" style="color: var(--text-muted)">Načítání...</span>
-            <span id="userEmail" class="user-email"></span>
-            <button id="loginBtn" class="btn-primary">Přihlásit přes Google</button>
+            <div id="userStatus" style="color: var(--text-muted); font-size: 13px; margin-bottom: 5px;">Načítání...</div>
+            <div id="userEmail" style="font-weight: 700; margin-bottom: 10px; word-break: break-all;"></div>
+            <button id="loginBtn" class="btn-primary"><i class="fa-solid fa-user"></i> Přihlásit přes Google</button>
             <button id="logoutBtn" class="btn-danger" style="display:none">Odhlásit se</button>
         </div>
 
-        <div class="stats-box">
-            <span>Navštívené země</span>
-            <span id="counter" class="stats-count">0</span>
+        <div class="stats-card">
+            <div style="display:flex; justify-content:space-between; font-weight:700;">
+                <span>Navštíveno: <span id="vCount" style="color:var(--visited)">0</span></span>
+                <span>Chci vidět: <span id="wCount" style="color:var(--wishlist)">0</span></span>
+            </div>
+            <div style="margin-top: 15px; font-size: 13px; color: var(--text-muted); font-weight: 600;">
+                Prozkoumáno: <span id="progressPercent">0</span>% světa
+            </div>
+            <div class="progress-container"><div id="progressBar" class="progress-bar"></div></div>
         </div>
 
         <div>
-            <h3 style="margin: 0 0 12px 0; font-size: 16px;">Seznam navštívených států</h3>
-            <div id="countries" class="badge-container">
-                </div>
+            <h4 style="margin: 0 0 8px 0;">Navštívené státy</h4>
+            <div id="vList" class="badge-list"></div>
+            <h4 style="margin: 15px 0 8px 0;">Plánované cesty</h4>
+            <div id="wList" class="badge-list"></div>
         </div>
     </div>
 
     <div class="main-content">
         <div id="chartdiv"></div>
-        <div class="map-hint">💡 Kliknutím na libovolný stát ho přidáš nebo odebereš</div>
+        
+        <div class="legend">
+            <div class="legend-item"><div class="dot" style="background:var(--visited)"></div>Navštíveno</div>
+            <div class="legend-item"><div class="dot" style="background:var(--wishlist)"></div>Chci navštívit</div>
+            <div class="legend-item"><div class="dot" style="background:#cbd5e1"></div>Nenavštíveno</div>
+        </div>
     </div>
+</div>
 
+<div id="countryModal" class="modal-overlay">
+    <div class="modal">
+        <h2 id="modalCountryName">Název země</h2>
+        <div>
+            <label style="font-size:12px; font-weight:600; color:var(--text-muted)">STAV CESTY</label>
+            <select id="modalStatus">
+                <option value="none">Nenavštíveno (Smazat)</option>
+                <option value="visited">Navštíveno</option>
+                <option value="wishlist">Chci navštívit</option>
+            </select>
+        </div>
+        <div>
+            <label style="font-size:12px; font-weight:600; color:var(--text-muted)">KDY / PLÁNOVÁNO</label>
+            <input type="date" id="modalDate">
+        </div>
+        <div>
+            <label style="font-size:12px; font-weight:600; color:var(--text-muted)">CESTOVATELSKÉ POZNÁMKY</label>
+            <textarea id="modalNotes" rows="3" placeholder="Zážitky, památky, restaurace..."></textarea>
+        </div>
+        <div class="modal-buttons">
+            <button id="modalCancelBtn" style="background:#e2e8f0; color:var(--text-main)">Zrušit</button>
+            <button id="modalSaveBtn" class="btn-primary">Uložit</button>
+        </div>
+    </div>
 </div>
 
 <script type="module">
@@ -214,7 +279,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/fireba
 import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-// Firebase konfigurace
 const firebaseConfig = {
   apiKey: "AIzaSyBOGBofSuqHCGdmw2wlBP0B4vqqw29BWa4",
   authDomain: "mapp-db0b3.firebaseapp.com",
@@ -229,167 +293,238 @@ const auth = getAuth(app);
 const db = getFirestore(app);
 const provider = new GoogleAuthProvider();
 
-// DOM prvky
-const loginBtn = document.getElementById("loginBtn");
-const logoutBtn = document.getElementById("logoutBtn");
-const userStatus = document.getElementById("userStatus");
-const userEmail = document.getElementById("userEmail");
-const countriesDiv = document.getElementById("countries");
-const counter = document.getElementById("counter");
+// Kontrola režimu sdílení (hledání ?user=UID v URL)
+const urlParams = new URLSearchParams(window.location.search);
+const sharedUserId = urlParams.get('user');
+const isReadOnly = !!sharedUserId;
 
 let currentUser = null;
-let visited = []; // Pole uložených ISO kódů (např. ["CZ", "US", "DE"])
+let dbCountries = {}; // Struktura: { "CZ": { status: "visited", date: "", notes: "" } }
+let selectedCountryId = null;
 
-// --- INICIALIZACE MAPY AMCHARTS 5 ---
+// AmCharts globální proměnné
 let root, chart, worldSeries;
 
+// --- INICIALIZACE MAPY ---
 function initMap() {
     root = am5.Root.new("chartdiv");
     root.setThemes([am5themes_Animated.new(root)]);
 
     chart = root.container.children.push(
         am5map.MapChart.new(root, {
-            panX: "translateX",
-            panY: "translateY",
-            projection: am5map.geoMercator() // Použití ploché mapy světa
+            panX: "translateX", panY: "translateY", projection: am5map.geoMercator()
         })
     );
 
     worldSeries = chart.series.push(
         am5map.MapPolygonSeries.new(root, {
-            geoJSON: am5geodata_worldLow,
-            exclude: ["AQ"] // Schováme Antarktidu pro lepší estetiku
+            geoJSON: am5geodata_worldLow, exclude: ["AQ"]
         })
     );
 
-    // Základní nastavení vzhledu neoznačených zemí
     worldSeries.mapPolygons.template.setAll({
-        tooltipText: "{name}",
-        toggleKey: "active",
-        interactive: true,
-        fill: am5.color(0xcbd5e1), // Světle šedá pro nenavštívené
-        stroke: am5.color(0xffffff), // Bílé hranice
-        strokeWidth: 1
+        tooltipText: "{name}", interactive: true,
+        fill: am5.color(0xcbd5e1), stroke: am5.color(0xffffff), strokeWidth: 1
     });
 
-    // Hover efekt (najetí myší)
-    worldSeries.mapPolygons.template.states.create("hover", {
-        fill: am5.color(0x94a3b8)
-    });
+    worldSeries.mapPolygons.template.states.create("hover", { fill: am5.color(0x94a3b8) });
 
-    // Efekt aktivního stavu (Když je země označená jako navštívená)
-    worldSeries.mapPolygons.template.states.create("active", {
-        fill: am5.color(0x10b981) // Moderní smaragdově zelená
-    });
-
-    // HLAVNÍ LOGIKA: Kliknutí na zemi v mapě
-    worldSeries.mapPolygons.template.on("active", function(active, target) {
-        if (!currentUser) return;
+    // KLIKNUTÍ NA MAPU -> Otevře detail (pokud nejsme v read-only režimu)
+    worldSeries.mapPolygons.template.events.on("click", function(ev) {
+        if (isReadOnly) return;
+        if (!currentUser) { alert("Pro úpravy se nejdříve přihlas."); return; }
         
-        const countryId = target.dataItem.get("id"); // Získá ISO kód státu (např. "CZ")
-        
-        if (active) {
-            if (!visited.includes(countryId)) {
-                visited.push(countryId);
-                saveData();
-            }
-        } else {
-            visited = visited.filter(id => id !== countryId);
-            saveData();
-        }
-        updateSidebarUI();
+        const countryId = ev.target.dataItem.get("id");
+        openModal(countryId);
     });
 
-    // Přidání ovládacích prvků pro zoomování (plus / mínus tlačítka v rohu)
     chart.set("zoomControl", am5map.ZoomControl.new(root, {}));
+
+    // Jakmile se načtou data mapy, vybudujeme vyhledávání a stáhneme data z DB
+    worldSeries.events.on("datavalidated", () => {
+        buildSearch();
+        if (isReadOnly) {
+            loadSharedData();
+        }
+    });
 }
 
-// Spuštění mapy okamžitě při načtení stránky
 initMap();
 
-// --- FIREBASE DATOVÉ FUNKCE ---
-
-async function loadData() {
-    const ref = doc(db, "users", currentUser.uid);
-    const snap = await getDoc(ref);
-    visited = snap.exists() ? (snap.data().countries || []) : [];
+// --- MODAL OKNO (LOGIKA) ---
+const modal = document.getElementById("countryModal");
+function openModal(countryId) {
+    selectedCountryId = countryId;
+    const dataItem = worldSeries.getDataItemById(countryId);
+    document.getElementById("modalCountryName").textContent = dataItem ? dataItem.dataContext.name : countryId;
     
-    // Synchronizace dat z DB do vizuálního stavu mapy
-    updateMapVisuals();
-    updateSidebarUI();
+    const existingData = dbCountries[countryId] || { status: "none", date: "", notes: "" };
+    document.getElementById("modalStatus").value = existingData.status || "none";
+    document.getElementById("modalDate").value = existingData.date || "";
+    document.getElementById("modalNotes").value = existingData.notes || "";
+    
+    modal.classList.add("active");
+}
+
+document.getElementById("modalCancelBtn").onclick = () => modal.classList.remove("active");
+document.getElementById("modalSaveBtn").onclick = async () => {
+    const status = document.getElementById("modalStatus").value;
+    const date = document.getElementById("modalDate").value;
+    const notes = document.getElementById("modalNotes").value;
+
+    if (status === "none") {
+        delete dbCountries[selectedCountryId];
+    } else {
+        dbCountries[selectedCountryId] = { status, date, notes };
+    }
+
+    await saveData();
+    modal.classList.remove("active");
+    updateUI();
+};
+
+// --- VYHLEDÁVÁNÍ & LET LETADLEM ---
+function buildSearch() {
+    const searchInput = document.getElementById("searchInput");
+    const resultsDiv = document.getElementById("searchResults");
+
+    searchInput.oninput = () => {
+        const val = searchInput.value.toLowerCase();
+        resultsDiv.innerHTML = "";
+        if(!val) { resultsDiv.style.display = "none"; return; }
+
+        let count = 0;
+        worldSeries.mapPolygons.each(polygon => {
+            const name = polygon.dataItem.get("name") || "";
+            const id = polygon.dataItem.get("id");
+            if (name.toLowerCase().includes(val) && count < 5) {
+                const item = document.createElement("div");
+                item.className = "search-item";
+                item.textContent = name;
+                item.onclick = () => {
+                    chart.zoomToDataItem(polygon.dataItem); // Hladký přelet
+                    worldSeries.select(polygon.dataItem);
+                    searchInput.value = "";
+                    resultsDiv.style.display = "none";
+                    if(!isReadOnly && currentUser) openModal(id);
+                };
+                resultsDiv.appendChild(item);
+                count++;
+            }
+        });
+        resultsDiv.style.display = count > 0 ? "block" : "none";
+    };
+}
+
+// --- DATOVÉ OPERACE FIREBASE ---
+async function loadUserData() {
+    const ref = doc(db, "users_v2", currentUser.uid);
+    const snap = await getDoc(ref);
+    dbCountries = snap.exists() ? snap.data() : {};
+    updateUI();
+}
+
+async function loadSharedData() {
+    document.getElementById("shareBanner").style.display = "block";
+    const ref = doc(db, "users_v2", sharedUserId);
+    const snap = await getDoc(ref);
+    dbCountries = snap.exists() ? snap.data() : {};
+    updateUI();
 }
 
 async function saveData() {
-    const ref = doc(db, "users", currentUser.uid);
-    await setDoc(ref, { countries: visited });
+    if (isReadOnly) return;
+    const ref = doc(db, "users_v2", currentUser.uid);
+    await setDoc(ref, dbCountries);
 }
 
-// Aktualizace textových prvků a seznamu na levé straně
-function updateSidebarUI() {
-    countriesDiv.innerHTML = "";
-    counter.textContent = visited.length;
+// --- UPDATE UI & MAP VISUALS ---
+function updateUI() {
+    const vList = document.getElementById("vList");
+    const wList = document.getElementById("wList");
+    vList.innerHTML = ""; wList.innerHTML = "";
 
-    if (visited.length === 0) {
-        countriesDiv.innerHTML = `<span style="color: var(--text-muted); font-size: 13px;">Zatím žádné navštívené země.</span>`;
+    let vCount = 0; let wCount = 0;
+
+    // Reset bareb na mapě
+    worldSeries.mapPolygons.each(polygon => {
+        polygon.set("fill", am5.color(0xcbd5e1));
+    });
+
+    // Projdeme data a aplikujeme změny
+    Object.keys(dbCountries).forEach(code => {
+        const item = dbCountries[code];
+        const polygon = worldSeries.getDataItemById(code);
+        const name = polygon ? polygon.dataContext.name : code;
+
+        if (item.status === "visited") {
+            vCount++;
+            if(polygon) polygon.get("mapPolygon").set("fill", am5.color(0x10b981)); // Zelená
+            
+            const badge = document.createElement("span");
+            badge.className = "badge v";
+            badge.innerHTML = `<i class="fa-solid fa-circle-check"></i> ${name}`;
+            badge.title = `${item.date ? 'Datum: ' + item.date : ''}\n${item.notes ? 'Poznámka: ' + item.notes : ''}`;
+            vList.appendChild(badge);
+        } 
+        else if (item.status === "wishlist") {
+            wCount++;
+            if(polygon) polygon.get("mapPolygon").set("fill", am5.color(0xf59e0b)); // Žlutá
+            
+            const badge = document.createElement("span");
+            badge.className = "badge w";
+            badge.innerHTML = `<i class="fa-solid fa-plane"></i> ${name}`;
+            badge.title = item.notes ? 'Plán: ' + item.notes : 'Naplánováno';
+            wList.appendChild(badge);
+        }
+    });
+
+    document.getElementById("vCount").textContent = vCount;
+    document.getElementById("wCount").textContent = wCount;
+
+    // Výpočet % (Svět má cca 195 nezávislých států)
+    const percent = Math.min(((vCount / 195) * 100).toFixed(1), 100);
+    document.getElementById("progressPercent").textContent = percent;
+    document.getElementById("progressBar").style.width = percent + "%";
+}
+
+// Tlačítko pro sdílení
+document.getElementById("shareBtn").onclick = () => {
+    if(!currentUser) return;
+    const shareUrl = `${window.location.origin}${window.location.pathname}?user=${currentUser.uid}`;
+    navigator.clipboard.writeText(shareUrl);
+    alert("Odkaz na tvou mapu byl zkopírován do schránky! Můžeš ho poslat kamarádům.");
+};
+
+// --- AUTH LOGIKA ---
+loginBtn.onclick = async () => { await signInWithPopup(auth, provider); };
+logoutBtn.onclick = async () => { window.location.href = window.location.origin + window.location.pathname; await signOut(auth); };
+
+onAuthStateChanged(auth, async (user) => {
+    if (isReadOnly) {
+        // Pokud si prohlížíme cizí mapu, ignorujeme stav přihlášení pro editaci
+        document.getElementById("loginBtn").style.display = "none";
+        document.getElementById("userStatus").textContent = "Režim prohlížení";
         return;
     }
 
-    visited.forEach(code => {
-        // Vyhledáme plný český/anglický název země přímo z mapových geodat podle ISO kódu
-        const dataItem = worldSeries.getDataItemById(code);
-        const name = dataItem ? dataItem.dataContext.name : code;
-
-        const span = document.createElement("span");
-        span.className = "badge";
-        span.textContent = name;
-        countriesDiv.appendChild(span);
-    });
-}
-
-// Projde mapu a přepne do stavu 'active' ty státy, které má uživatel uložené v poli 'visited'
-function updateMapVisuals() {
-    worldSeries.mapPolygons.each(function(polygon) {
-        const countryId = polygon.dataItem.get("id");
-        if (visited.includes(countryId)) {
-            polygon.set("active", true);
-        } else {
-            polygon.set("active", false);
-        }
-    });
-}
-
-// --- AUTENTIZACE A STAV UŽIVATELE ---
-
-loginBtn.onclick = async () => { 
-    try {
-        await signInWithPopup(auth, provider); 
-    } catch (error) {
-        alert("Chyba při přihlašování: " + error.message);
-    }
-};
-
-logoutBtn.onclick = async () => { await signOut(auth); };
-
-onAuthStateChanged(auth, async (user) => {
     if (user) {
         currentUser = user;
-        userStatus.textContent = "Přihlášen jako:";
-        userEmail.textContent = user.email;
+        document.getElementById("userStatus").textContent = "Přihlášen jako:";
+        document.getElementById("userEmail").textContent = user.email;
         loginBtn.style.display = "none";
         logoutBtn.style.display = "block";
-        // Aktivujeme interaktivitu mapy (povolená kliknutí)
-        worldSeries.mapPolygons.template.set("interactive", true);
-        await loadData();
+        document.getElementById("shareBtn").style.display = "inline-block";
+        await loadUserData();
     } else {
         currentUser = null;
-        visited = [];
-        userStatus.textContent = "Nepřihlášen";
-        userEmail.textContent = "";
+        dbCountries = {};
+        document.getElementById("userStatus").textContent = "Nepřihlášen";
+        document.getElementById("userEmail").textContent = "";
         loginBtn.style.display = "block";
         logoutBtn.style.display = "none";
-        // Pokud není uživatel přihlášen, vymažeme zelené státy a zakážeme klikání
-        updateMapVisuals();
-        updateSidebarUI();
+        document.getElementById("shareBtn").style.display = "none";
+        updateUI();
     }
 });
 </script>
